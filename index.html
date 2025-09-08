@@ -84,7 +84,7 @@
         .mixer { display: flex; flex-direction: column; align-items: center; gap: 20px; }
         .knob-container { text-align: center; }
         .knob-label { font-size: 0.8em; color: var(--text-muted); }
-        .filter-knob { width: 50px; height: 50px; transition: transform 0.1s linear; } /* JS will handle the rest */
+        .filter-knob { width: 50px; height: 50px; transition: transform 0.1s linear; }
         
         .playlist-container { background-color: var(--playlist-color); }
         #load-folder-btn { width: 100%; padding: 12px; font-size: 1em; background-color: var(--accent-blue); border: none; margin-bottom: 10px; }
@@ -313,7 +313,7 @@
         if (d.syncActive) {
             d.syncActive = false;
             btn.classList.remove('active');
-            if (masterDeck === id) { // If it was master, find new master or none
+            if (masterDeck === id) { 
                 masterDeck = decks[otherId].syncActive ? otherId : null;
             }
         } else {
@@ -349,7 +349,7 @@
             playSound(id);
         } else {
             d.hotcues[cueIndex] = currentTime;
-            document.querySelector(`#deck-${id} .hot-cue-button[data-cue='${cueIndex}']`).style.backgroundColor = var(--accent-yellow);
+            document.querySelector(`#deck-${id} .hot-cue-button[data-cue='${cueIndex}']`).style.backgroundColor = '#ffeb3b'; // FIX: Use hex code
         }
     }
 
@@ -380,21 +380,22 @@
         const val = parseFloat(event.target.value); // Range -1 to 1
         const gainA = Math.cos((val + 1) / 2 * 0.5 * Math.PI);
         const gainB = Math.cos((1 - val) / 2 * 0.5 * Math.PI);
-        mixer.crossfadeA.gain.setTargetAtTime(gainA, audioContext.currentTime, 0.01);
-        mixer.crossfadeB.gain.setTargetAtTime(gainB, audioContext.currentTime, 0.01);
+        if(mixer.crossfadeA) mixer.crossfadeA.gain.setTargetAtTime(gainA, audioContext.currentTime, 0.01);
+        if(mixer.crossfadeB) mixer.crossfadeB.gain.setTargetAtTime(gainB, audioContext.currentTime, 0.01);
     }
     
     function applyFilter(id, value) { // value 0 to 1
         const filterNode = decks[id].filterNode;
+        if (!audioContext) return;
         const maxFreq = audioContext.sampleRate / 2;
         
-        if (value === 0.5) { // Center off
+        if (value > 0.49 && value < 0.51) { 
             filterNode.frequency.setTargetAtTime(maxFreq, audioContext.currentTime, 0.01);
-        } else if (value < 0.5) { // Low-pass
+        } else if (value < 0.5) { 
             filterNode.type = 'lowpass';
             const freq = Math.pow(10, 2 + (value * 2) * 2.5);
             filterNode.frequency.setTargetAtTime(freq, audioContext.currentTime, 0.01);
-        } else { // High-pass
+        } else { 
             filterNode.type = 'highpass';
             const freq = Math.pow(10, 1 + ((value - 0.5) * 2) * 3);
             filterNode.frequency.setTargetAtTime(freq, audioContext.currentTime, 0.01);
@@ -465,9 +466,28 @@
         document.querySelector(`#deck-${id} .waveform-progress`).style.width = `${Math.min(100, progress)}%`;
     }
 
-    // ... (All other UI, BPM, and utility functions remain below)
-    function setupJogWheel(jogEl, id){/* ... Jog wheel logic ... */}
-    function setupKnob(canvas, callback){
+    function setupJogWheel(jogEl, id) {
+        jogEl.addEventListener('mousedown', e => {
+            if (!decks[id].isPlaying) return;
+            const initialX = e.clientX;
+            const originalRate = decks[id].sourceNode.playbackRate.value;
+
+            function onMouseMove(moveEvent) {
+                const deltaX = moveEvent.clientX - initialX;
+                const bendAmount = deltaX / 2000;
+                decks[id].sourceNode.playbackRate.value = originalRate + bendAmount;
+            }
+            function onMouseUp() {
+                decks[id].sourceNode.playbackRate.value = originalRate;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    }
+
+    function setupKnob(canvas, callback) {
         let value = 0.5;
         const ctx = canvas.getContext('2d');
         const draw = () => {
@@ -476,7 +496,8 @@
             ctx.fillStyle = '#2a2e36';
             ctx.beginPath(); ctx.arc(25, 25, 24, 0, 2 * Math.PI); ctx.fill();
             ctx.strokeStyle = '#4c525d'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.strokeStyle = var(--accent-blue); ctx.lineWidth = 3; ctx.lineCap = 'round';
+            ctx.strokeStyle = '#00aeff'; // FIX: Use hex code
+            ctx.lineWidth = 3; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(25, 25); ctx.lineTo(25 + Math.sin(angle) * 20, 25 - Math.cos(angle) * 20); ctx.stroke();
         };
         const handleInteraction = (e) => {
@@ -491,32 +512,121 @@
                 callback(value);
             };
             const onEnd = () => {
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onEnd);
-                document.removeEventListener('touchmove', onMove);
-                document.removeEventListener('touchend', onEnd);
+                document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onEnd);
+                document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd);
             };
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onEnd);
-            document.addEventListener('touchmove', onMove);
-            document.addEventListener('touchend', onEnd);
+            document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onEnd);
+            document.addEventListener('touchmove', onMove); document.addEventListener('touchend', onEnd);
         };
         canvas.addEventListener('mousedown', handleInteraction);
         canvas.addEventListener('touchstart', handleInteraction);
         draw();
     }
-    function drawWaveform(id){/* ... Waveform drawing ... */}
-    function syncBpmInputs(event, id, updateSlider = true){
+    
+    function drawWaveform(id) {
+        const buffer = decks[id].audioBuffer;
+        if (!buffer) return;
+        const canvas = document.querySelector(`#deck-${id} .waveform-canvas`);
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        
+        const data = buffer.getChannelData(0);
+        const step = Math.ceil(data.length / canvas.width);
+        const amp = canvas.height / 2;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#00aeff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < canvas.width; i++) {
+            let min = 1.0, max = -1.0;
+            for (let j = 0; j < step; j++) {
+                const datum = data[(i * step) + j];
+                if (datum < min) min = datum;
+                if (datum > max) max = datum;
+            }
+            ctx.moveTo(i, (1 + min) * amp);
+            ctx.lineTo(i, (1 + max) * amp);
+        }
+        ctx.stroke();
+    }
+
+    function syncBpmInputs(event, id, updateSlider = true) {
         const newBpm = parseFloat(event.target.value);
         const deckEl = document.getElementById(`deck-${id}`);
         if(updateSlider) deckEl.querySelector('.bpm-slider').value = newBpm;
         deckEl.querySelector('.bpm-input').value = newBpm;
         if(decks[id].isPlaying) updatePlaybackRate(id);
     }
-    function updateBpmUI(id, bpm){/* ... BPM UI update ... */}
-    function enableControls(id, isEnabled){/* ... Enable/disable controls ... */}
-    function resetDeck(id){/* ... Reset deck state ... */}
-    async function analyzeBpm(audioBuffer) {/* ... BPM analysis logic ... */ return 128.0; } // Placeholder
+
+    function updateBpmUI(id, bpm) {
+        const deckEl = document.getElementById(`deck-${id}`);
+        const bpmInput = deckEl.querySelector('.bpm-input');
+        const bpmSlider = deckEl.querySelector('.bpm-slider');
+        bpmInput.value = (Math.round(bpm * 10) / 10).toFixed(1);
+        const baseBpm = Math.round(bpm);
+        bpmSlider.min = baseBpm * 0.8;
+        bpmSlider.max = baseBpm * 1.2;
+        bpmSlider.value = bpm;
+    }
+
+    function enableControls(id, isEnabled) {
+        document.querySelectorAll(`#deck-${id} button, #deck-${id} input[type=range], #deck-${id} input[type=number]`).forEach(el => {
+            el.disabled = !isEnabled;
+        });
+    }
+
+    function resetDeck(id) {
+        if (decks[id].isPlaying) stopSound(id);
+        enableControls(id, false);
+        decks[id] = { ...decks[id], isPlaying: false, audioBuffer: null, originalBpm: 0, cuePoint: 0, mainCuePoint: 0, hotcues: [null, null, null], loop: {} };
+        updateProgress(id);
+        const canvas = document.querySelector(`#deck-${id} .waveform-canvas`);
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        document.querySelectorAll(`#deck-${id} .hot-cue-button`).forEach(btn => btn.style.backgroundColor = '');
+        document.querySelector(`#deck-${id} .sync-button`).classList.remove('active');
+        document.querySelector(`#deck-${id} .loop-toggle`).classList.remove('active');
+    }
+
+    async function analyzeBpm(audioBuffer) {
+        const offlineCtx = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+        const source = offlineCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        const filter = offlineCtx.createBiquadFilter();
+        filter.type = 'lowpass'; filter.frequency.value = 150; filter.Q.value = 1;
+        source.connect(filter);
+        filter.connect(offlineCtx.destination);
+        source.start(0);
+        const processedBuffer = await offlineCtx.startRendering();
+        const data = processedBuffer.getChannelData(0);
+        const getPeaks = (data) => {
+            const peaks = []; const threshold = 0.9; let lastPeak = 0;
+            for (let i = 1; i < data.length - 1; i++) {
+                if (data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold) {
+                    if (i - lastPeak > audioBuffer.sampleRate * 0.25) { // Debounce peaks
+                        peaks.push(i);
+                        lastPeak = i;
+                    }
+                }
+            }
+            return peaks;
+        };
+        const peaks = getPeaks(data);
+        if (peaks.length < 10) return 120;
+        const intervals = [];
+        for (let i = 0; i < peaks.length - 1; i++) intervals.push(peaks[i + 1] - peaks[i]);
+        const tempoCounts = {};
+        intervals.forEach(interval => {
+            let tempo = 60 / (interval / audioBuffer.sampleRate);
+            while (tempo < 80) tempo *= 2;
+            while (tempo > 160) tempo /= 2;
+            const roundedTempo = Math.round(tempo);
+            tempoCounts[roundedTempo] = (tempoCounts[roundedTempo] || 0) + 1;
+        });
+        if (Object.keys(tempoCounts).length === 0) return 120;
+        return parseFloat(Object.keys(tempoCounts).reduce((a, b) => tempoCounts[a] > tempoCounts[b] ? a : b));
+    }
 </script>
 </body>
 </html>
