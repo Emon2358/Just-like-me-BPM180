@@ -53,46 +53,38 @@
             font-size: 1.1em; font-weight: 600; color: var(--text-muted);
             border-bottom: 1px solid #3c424d; padding-bottom: 10px;
         }
-        /* ... (rest of the styles are below) ... */
         .waveform-container { position: relative; background-color: #111; border-radius: 4px; height: 70px; margin-bottom: 10px; border: 1px solid #333; }
         .waveform-canvas, .waveform-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         .waveform-progress { background-color: rgba(0, 174, 255, 0.4); width: 0; }
-        
         .jog-wheel { width: 150px; height: 150px; background: linear-gradient(145deg, #2b2f37, #1f232a); border-radius: 50%; margin: 10px auto; border: 5px solid #333; cursor: grab; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 0 15px rgba(0,0,0,0.5); }
         .jog-wheel:active { cursor: grabbing; }
         .jog-wheel-inner { width: 70px; height: 70px; background: #1a1d22; border-radius: 50%; border: 1px solid #444; }
-
         .fader-group { display: flex; align-items: center; gap: 10px; font-size: 0.9em; }
         input[type="range"] { flex-grow: 1; -webkit-appearance: none; background: #111; height: 6px; border-radius: 3px; outline: none; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: var(--text-light); border-radius: 50%; cursor: pointer; border: 2px solid #333; }
         input[type="range"].vertical-fader { writing-mode: vertical-lr; width: 10px; height: auto; flex-grow: 1; background: #111; }
         input[type="range"].vertical-fader::-webkit-slider-thumb { width: 24px; height: 24px; }
         input[type="number"] { width: 70px; background-color: #111; color: var(--text-light); border: 1px solid #444; border-radius: 4px; padding: 5px; text-align: center; }
-
         .button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
         .auto-loop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
         button { background-color: #3c424d; color: var(--text-light); border: 1px solid #555; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.8em; font-weight: bold; transition: all 0.2s ease; }
         button:hover { border-color: var(--accent-blue); }
         button:disabled { background-color: #2a2e36; cursor: not-allowed; color: #666; border-color: #444;}
-        
         .play-button.playing { background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); border-color: #fff; }
         .cue-button { background-color: var(--accent-orange); }
         .hot-cue-button { background-color: var(--accent-blue); }
         .loop-button.active { background-color: var(--accent-purple); box-shadow: 0 0 10px var(--accent-purple); border-color: #fff; }
         .sync-button.active { background-color: var(--accent-pink); box-shadow: 0 0 10px var(--accent-pink); border-color: #fff; }
-
         .mixer { display: flex; flex-direction: column; align-items: center; gap: 20px; }
         .knob-container { text-align: center; }
         .knob-label { font-size: 0.8em; color: var(--text-muted); }
         .filter-knob { width: 50px; height: 50px; transition: transform 0.1s linear; }
-        
         .playlist-container { background-color: var(--playlist-color); }
         #load-folder-btn { width: 100%; padding: 12px; font-size: 1em; background-color: var(--accent-blue); border: none; margin-bottom: 10px; }
         #playlist { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
         #playlist li { padding: 8px 12px; background-color: #3c424d; border-radius: 4px; margin-bottom: 5px; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center; }
         #playlist li:hover { background-color: #4c525d; }
         .load-track-btns button { font-size: 0.7em; padding: 4px 8px; margin-left: 5px; }
-
         #status { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background-color: rgba(0,0,0,0.7); color: var(--text-light); padding: 5px 15px; border-radius: 20px; font-size: 0.9em; }
     </style>
 </head>
@@ -211,17 +203,23 @@
             deckEl.querySelectorAll('.hot-cue-button').forEach(btn => btn.addEventListener('click', e => handleHotCue(id, parseInt(e.target.dataset.cue))));
             deckEl.querySelectorAll('.loop-button[data-beats]').forEach(btn => btn.addEventListener('click', e => handleAutoLoop(id, parseInt(e.target.dataset.beats))));
             deckEl.querySelector('.loop-toggle').addEventListener('click', () => toggleLoop(id, false));
-
             deckEl.querySelector('.bpm-slider').addEventListener('input', e => syncBpmInputs(e, id));
             deckEl.querySelector('.bpm-input').addEventListener('input', e => syncBpmInputs(e, id, false));
-
             setupJogWheel(deckEl.querySelector('.jog-wheel'), id);
             setupKnob(document.getElementById(`filter-${id}`), value => applyFilter(id, value));
         });
 
         document.getElementById('crossfader').addEventListener('input', updateCrossfader);
-        document.getElementById('volume-A').addEventListener('input', e => decks.A.volumeNode.gain.value = e.target.value ** 2);
-        document.getElementById('volume-B').addEventListener('input', e => decks.B.volumeNode.gain.value = e.target.value ** 2);
+        
+        // ▼▼▼ ERROR FIX ▼▼▼
+        document.getElementById('volume-A').addEventListener('input', e => {
+            if (decks.A.volumeNode) decks.A.volumeNode.gain.value = e.target.value ** 2;
+        });
+        document.getElementById('volume-B').addEventListener('input', e => {
+            if (decks.B.volumeNode) decks.B.volumeNode.gain.value = e.target.value ** 2;
+        });
+        // ▲▲▲ ERROR FIX ▲▲▲
+
         document.getElementById('load-folder-btn').addEventListener('click', loadFolder);
     });
 
@@ -349,7 +347,7 @@
             playSound(id);
         } else {
             d.hotcues[cueIndex] = currentTime;
-            document.querySelector(`#deck-${id} .hot-cue-button[data-cue='${cueIndex}']`).style.backgroundColor = '#ffeb3b'; // FIX: Use hex code
+            document.querySelector(`#deck-${id} .hot-cue-button[data-cue='${cueIndex}']`).style.backgroundColor = '#ffeb3b';
         }
     }
 
@@ -418,7 +416,14 @@
             }
             renderPlaylist();
         } catch (err) {
-            console.error('Folder selection cancelled or failed:', err);
+            // ▼▼▼ ERROR FIX ▼▼▼
+            if (err.name === 'AbortError') {
+                status.textContent = 'Folder selection cancelled.';
+            } else {
+                console.error('Folder selection failed:', err);
+                status.textContent = 'Error loading folder.';
+            }
+            // ▲▲▲ ERROR FIX ▲▲▲
         }
     }
 
@@ -428,18 +433,14 @@
         playlistFiles.forEach((fileHandle, index) => {
             const li = document.createElement('li');
             li.textContent = fileHandle.name.replace(/\.[^/.]+$/, "");
-            
             const btnContainer = document.createElement('div');
             btnContainer.className = 'load-track-btns';
-            
             const btnA = document.createElement('button');
             btnA.textContent = 'A';
             btnA.onclick = async () => loadTrack('A', await fileHandle.getFile());
-            
             const btnB = document.createElement('button');
             btnB.textContent = 'B';
             btnB.onclick = async () => loadTrack('B', await fileHandle.getFile());
-            
             btnContainer.appendChild(btnA);
             btnContainer.appendChild(btnB);
             li.appendChild(btnContainer);
@@ -468,17 +469,16 @@
 
     function setupJogWheel(jogEl, id) {
         jogEl.addEventListener('mousedown', e => {
-            if (!decks[id].isPlaying) return;
+            if (!decks[id].isPlaying || !decks[id].sourceNode) return;
             const initialX = e.clientX;
             const originalRate = decks[id].sourceNode.playbackRate.value;
-
             function onMouseMove(moveEvent) {
                 const deltaX = moveEvent.clientX - initialX;
                 const bendAmount = deltaX / 2000;
-                decks[id].sourceNode.playbackRate.value = originalRate + bendAmount;
+                if (decks[id].sourceNode) decks[id].sourceNode.playbackRate.value = originalRate + bendAmount;
             }
             function onMouseUp() {
-                decks[id].sourceNode.playbackRate.value = originalRate;
+                if (decks[id].sourceNode) decks[id].sourceNode.playbackRate.value = originalRate;
                 document.removeEventListener('mousemove', onMouseMove);
                 document.removeEventListener('mouseup', onMouseUp);
             }
@@ -496,7 +496,7 @@
             ctx.fillStyle = '#2a2e36';
             ctx.beginPath(); ctx.arc(25, 25, 24, 0, 2 * Math.PI); ctx.fill();
             ctx.strokeStyle = '#4c525d'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.strokeStyle = '#00aeff'; // FIX: Use hex code
+            ctx.strokeStyle = '#00aeff';
             ctx.lineWidth = 3; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(25, 25); ctx.lineTo(25 + Math.sin(angle) * 20, 25 - Math.cos(angle) * 20); ctx.stroke();
         };
@@ -530,11 +530,9 @@
         const ctx = canvas.getContext('2d');
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
-        
         const data = buffer.getChannelData(0);
         const step = Math.ceil(data.length / canvas.width);
         const amp = canvas.height / 2;
-        
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = '#00aeff';
         ctx.lineWidth = 1;
@@ -604,7 +602,7 @@
             const peaks = []; const threshold = 0.9; let lastPeak = 0;
             for (let i = 1; i < data.length - 1; i++) {
                 if (data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold) {
-                    if (i - lastPeak > audioBuffer.sampleRate * 0.25) { // Debounce peaks
+                    if (i - lastPeak > audioBuffer.sampleRate * 0.25) {
                         peaks.push(i);
                         lastPeak = i;
                     }
