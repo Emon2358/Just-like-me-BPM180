@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MP3 BPM Adjuster</title>
+    <title>Automatic MP3 BPM Adjuster</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -39,14 +39,12 @@
             margin-bottom: 8px;
             text-align: left;
         }
-        input[type="file"], input[type="number"], input[type="range"] {
+        input[type="file"] {
             width: 100%;
             padding: 10px;
             box-sizing: border-box;
             border-radius: 6px;
             border: 1px solid #ddd;
-        }
-        input[type="file"] {
             cursor: pointer;
             background-color: #f9f9f9;
         }
@@ -71,6 +69,22 @@
             background-color: #ccc;
             cursor: not-allowed;
         }
+        .bpm-info {
+            background-color: #e8f0fe;
+            border-left: 5px solid #1a73e8;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: left;
+            border-radius: 5px;
+        }
+        .bpm-info p {
+            margin: 0;
+            font-size: 1.1em;
+        }
+        .bpm-info strong {
+            font-size: 1.4em;
+            color: #1a73e8;
+        }
         .bpm-controls {
             display: flex;
             align-items: center;
@@ -82,11 +96,6 @@
         .bpm-controls input[type="number"] {
             width: 80px;
         }
-        #bpm-display {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #1a73e8;
-        }
         #status {
             margin-top: 20px;
             color: #555;
@@ -97,25 +106,23 @@
 <body>
 
 <div class="container">
-    <h1>MP3 BPM Adjuster 🎧</h1>
+    <h1>Automatic BPM Adjuster 🎶</h1>
 
     <div class="control-group">
         <label for="file-input">1. MP3ファイルを選択</label>
         <input type="file" id="file-input" accept=".mp3">
     </div>
 
-    <div class="control-group">
-        <label for="original-bpm">2. 元のBPMを入力</label>
-        <input type="number" id="original-bpm" placeholder="例: 128" min="30" max="300">
+    <div id="bpm-info-container" class="bpm-info" style="display: none;">
+        <p>解析されたBPM: <strong id="detected-bpm-display">...</strong></p>
     </div>
 
     <div class="control-group">
-        <label>3. BPMを調整</label>
+        <label for="bpm-slider">2. BPMを調整</label>
         <div class="bpm-controls">
-            <input type="range" id="bpm-slider" min="50" max="200" value="128" disabled>
-            <input type="number" id="bpm-input" min="50" max="200" value="128" disabled>
+            <input type="range" id="bpm-slider" min="50" max="200" value="120" disabled>
+            <input type="number" id="bpm-input" min="50" max="200" value="120" disabled>
         </div>
-        <p>現在のBPM: <span id="bpm-display">128</span></p>
     </div>
 
     <div class="control-group">
@@ -129,10 +136,10 @@
 <script>
     // --- DOM要素の取得 ---
     const fileInput = document.getElementById('file-input');
-    const originalBpmInput = document.getElementById('original-bpm');
     const bpmSlider = document.getElementById('bpm-slider');
     const bpmInput = document.getElementById('bpm-input');
-    const bpmDisplay = document.getElementById('bpm-display');
+    const detectedBpmDisplay = document.getElementById('detected-bpm-display');
+    const bpmInfoContainer = document.getElementById('bpm-info-container');
     const playPauseButton = document.getElementById('play-pause-button');
     const downloadButton = document.getElementById('download-button');
     const status = document.getElementById('status');
@@ -146,15 +153,13 @@
 
     // --- イベントリスナー ---
     fileInput.addEventListener('change', handleFileSelect);
-    originalBpmInput.addEventListener('input', handleBpmInput);
     bpmSlider.addEventListener('input', syncBpmInputs);
     bpmInput.addEventListener('input', syncBpmInputs);
     playPauseButton.addEventListener('click', togglePlayback);
     downloadButton.addEventListener('click', downloadAdjustedAudio);
 
     // --- 機能の有効/無効化 ---
-    function updateControlsState() {
-        const isReady = audioBuffer && originalBpm > 0;
+    function updateControlsState(isReady) {
         bpmSlider.disabled = !isReady;
         bpmInput.disabled = !isReady;
         playPauseButton.disabled = !isReady;
@@ -166,41 +171,45 @@
         const file = event.target.files[0];
         if (!file) return;
 
-        // AudioContextはユーザー操作後に初期化する
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
 
+        updateControlsState(false);
+        bpmInfoContainer.style.display = 'none';
         status.textContent = 'ファイルをデコード中...';
-        playPauseButton.disabled = true;
-        downloadButton.disabled = true;
 
         try {
             const arrayBuffer = await file.arrayBuffer();
             audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            status.textContent = 'ファイルの準備ができました。';
+            
+            status.textContent = 'BPMを解析中... (曲の長さにより時間がかかります)';
+            // BPM解析処理を少し遅延させてUIの更新を確実に行う
+            setTimeout(async () => {
+                const detectedBpm = await analyzeBpm(audioBuffer);
+                originalBpm = detectedBpm;
+
+                detectedBpmDisplay.textContent = Math.round(originalBpm * 10) / 10;
+                bpmInfoContainer.style.display = 'block';
+
+                // スライダー等の範囲と現在値を更新
+                const baseBpm = Math.round(originalBpm);
+                bpmSlider.min = Math.floor(baseBpm * 0.5);
+                bpmSlider.max = Math.ceil(baseBpm * 2);
+                bpmInput.min = Math.floor(baseBpm * 0.5);
+                bpmInput.max = Math.ceil(baseBpm * 2);
+                bpmSlider.value = baseBpm;
+                bpmInput.value = baseBpm;
+                
+                status.textContent = '準備ができました。';
+                updateControlsState(true);
+            }, 100);
+
         } catch (error) {
-            status.textContent = 'エラー: ファイルのデコードに失敗しました。';
+            status.textContent = 'エラー: ファイルの処理に失敗しました。';
             console.error(error);
             audioBuffer = null;
         }
-        updateControlsState();
-    }
-
-    // --- 元のBPM入力時の処理 ---
-    function handleBpmInput(event) {
-        originalBpm = parseFloat(event.target.value) || 0;
-        // スライダーと入力欄の範囲も更新
-        const baseBpm = originalBpm > 0 ? originalBpm : 128;
-        bpmSlider.min = Math.floor(baseBpm * 0.5);
-        bpmSlider.max = Math.ceil(baseBpm * 2);
-        bpmInput.min = Math.floor(baseBpm * 0.5);
-        bpmInput.max = Math.ceil(baseBpm * 2);
-        // 現在値を元のBPMにリセット
-        bpmSlider.value = baseBpm;
-        bpmInput.value = baseBpm;
-        bpmDisplay.textContent = baseBpm;
-        updateControlsState();
     }
 
     // --- BPMスライダーと入力欄の同期・再生レート更新 ---
@@ -208,17 +217,17 @@
         const newBpm = event.target.value;
         bpmSlider.value = newBpm;
         bpmInput.value = newBpm;
-        bpmDisplay.textContent = newBpm;
         updatePlaybackRate();
     }
     
     function updatePlaybackRate() {
-        if (!isPlaying || !sourceNode || !originalBpm) return;
-        const newBpm = parseFloat(bpmInput.value);
-        sourceNode.playbackRate.value = newBpm / originalBpm;
+        if (isPlaying && sourceNode && originalBpm > 0) {
+            const newBpm = parseFloat(bpmInput.value);
+            sourceNode.playbackRate.value = newBpm / originalBpm;
+        }
     }
 
-    // --- 再生/停止の切り替え ---
+    // --- 再生/停止 ---
     function togglePlayback() {
         if (isPlaying) {
             stopSound();
@@ -231,11 +240,11 @@
         if (!audioBuffer || !audioContext) return;
         sourceNode = audioContext.createBufferSource();
         sourceNode.buffer = audioBuffer;
-        updatePlaybackRate();
         sourceNode.connect(audioContext.destination);
         sourceNode.onended = () => {
-            stopSound();
+            if (isPlaying) stopSound();
         };
+        updatePlaybackRate(); // 再生開始前にレートを設定
         sourceNode.start(0);
         isPlaying = true;
         playPauseButton.textContent = '停止';
@@ -251,10 +260,87 @@
         playPauseButton.textContent = '再生';
     }
 
-    // --- 調整後音源のダウンロード処理 ---
+    // --- BPM解析 ---
+    async function analyzeBpm(audioBuffer) {
+        // オフラインコンテキストで音声データを高速処理
+        const offlineCtx = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+        const source = offlineCtx.createBufferSource();
+        source.buffer = audioBuffer;
+
+        // ビートが豊富な低周波帯を抽出するフィルター
+        const filter = offlineCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 150; // Hz
+        filter.Q.value = 1;
+
+        source.connect(filter);
+        filter.connect(offlineCtx.destination);
+        source.start(0);
+
+        const processedBuffer = await offlineCtx.startRendering();
+        const data = processedBuffer.getChannelData(0);
+        
+        // エネルギーのピーク（ビート）を検出
+        const peaks = getPeaks(data, audioBuffer.sampleRate);
+        if (peaks.length < 2) return 120; // デフォルト値
+
+        // ピーク間の間隔を分析
+        const intervals = getIntervals(peaks);
+        
+        // 最も可能性の高いBPMを特定
+        const topBpm = getTopBpm(intervals, audioBuffer.sampleRate);
+
+        return topBpm.bpm;
+    }
+
+    function getPeaks(data, sampleRate) {
+        const peaks = [];
+        const threshold = 0.6; // ピーク検出の閾値
+        for (let i = 1; i < data.length - 1; i++) {
+            if (data[i] > data[i - 1] && data[i] > data[i + 1] && data[i] > threshold) {
+                peaks.push(i);
+            }
+        }
+        return peaks;
+    }
+
+    function getIntervals(peaks) {
+        const intervals = [];
+        for (let i = 0; i < peaks.length - 1; i++) {
+            intervals.push(peaks[i + 1] - peaks[i]);
+        }
+        return intervals;
+    }
+
+    function getTopBpm(intervals, sampleRate) {
+        const intervalCounts = {};
+        intervals.forEach(interval => {
+            // BPMの候補を計算 (60秒 / (サンプル間隔 / サンプルレート))
+            const theoreticalBpm = 60 / (interval / sampleRate);
+            
+            // BPMを妥当な範囲(70-180)に丸め込む
+            let roundedBpm = Math.round(theoreticalBpm);
+            while(roundedBpm < 70) roundedBpm *= 2;
+            while(roundedBpm > 180) roundedBpm /= 2;
+            roundedBpm = Math.round(roundedBpm);
+
+            intervalCounts[roundedBpm] = (intervalCounts[roundedBpm] || 0) + 1;
+        });
+
+        // 最も頻出するBPMグループを見つける
+        let topBpm = { bpm: 120, count: 0 };
+        for (const bpm in intervalCounts) {
+            if (intervalCounts[bpm] > topBpm.count) {
+                topBpm = { bpm: parseFloat(bpm), count: intervalCounts[bpm] };
+            }
+        }
+        return topBpm;
+    }
+    
+    // --- ダウンロード処理 (変更なし) ---
     async function downloadAdjustedAudio() {
         if (!audioBuffer || !originalBpm) {
-            alert('オーディオファイルと元のBPMが設定されていません。');
+            alert('オーディオファイルが設定されていません。');
             return;
         }
         
@@ -265,10 +351,9 @@
             const newBpm = parseFloat(bpmInput.value);
             const playbackRate = newBpm / originalBpm;
             
-            // OfflineAudioContextでエフェクト（再生速度の変更）を適用
             const offlineContext = new OfflineAudioContext(
                 audioBuffer.numberOfChannels,
-                audioBuffer.length,
+                Math.ceil(audioBuffer.length / playbackRate), // 再生速度に合わせて長さを調整
                 audioBuffer.sampleRate
             );
 
@@ -279,11 +364,8 @@
             offlineSource.start(0);
 
             const renderedBuffer = await offlineContext.startRendering();
-            
-            // レンダリングされたバッファをWAVに変換
             const wavBlob = bufferToWav(renderedBuffer);
 
-            // ダウンロードリンクを作成してクリック
             const url = URL.createObjectURL(wavBlob);
             const a = document.createElement('a');
             a.style.display = 'none';
@@ -303,7 +385,6 @@
         }
     }
 
-    // --- AudioBufferをWAV Blobに変換する関数 ---
     function bufferToWav(buffer) {
         const numOfChan = buffer.numberOfChannels;
         const length = buffer.length * numOfChan * 2 + 44;
@@ -311,48 +392,36 @@
         const view = new DataView(bufferArr);
         const channels = [];
         let i, sample;
-        let offset = 0;
-        let pos = 0;
+        let offset = 0, pos = 0;
+        
+        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
 
-        // ヘッダを書き込む
         setUint32(0x46464952); // "RIFF"
-        setUint32(length - 8); // file length - 8
+        setUint32(length - 8);
         setUint32(0x45564157); // "WAVE"
-        setUint32(0x20746d66); // "fmt " chunk
-        setUint32(16); // length = 16
-        setUint16(1); // PCM (uncompressed)
+        setUint32(0x20746d66); // "fmt "
+        setUint32(16);
+        setUint16(1);
         setUint16(numOfChan);
         setUint32(buffer.sampleRate);
-        setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-        setUint16(numOfChan * 2); // block-align
-        setUint16(16); // 16-bit
-        setUint32(0x61746164); // "data" - chunk
-        setUint32(length - pos - 4); // chunk length
+        setUint32(buffer.sampleRate * 2 * numOfChan);
+        setUint16(numOfChan * 2);
+        setUint16(16);
+        setUint32(0x61746164); // "data"
+        setUint32(length - pos - 4);
 
-        function setUint16(data) {
-            view.setUint16(pos, data, true);
-            pos += 2;
-        }
-        function setUint32(data) {
-            view.setUint32(pos, data, true);
-            pos += 4;
-        }
-
-        // PCMデータを書き込む
-        for (i = 0; i < numOfChan; i++) {
-            channels.push(buffer.getChannelData(i));
-        }
+        for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
 
         while (pos < length) {
             for (i = 0; i < numOfChan; i++) {
                 sample = Math.max(-1, Math.min(1, channels[i][offset]));
-                sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+                sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
                 view.setInt16(pos, sample, true);
                 pos += 2;
             }
             offset++;
         }
-
         return new Blob([view], { type: 'audio/wav' });
     }
 
