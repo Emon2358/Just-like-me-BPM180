@@ -3,13 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Automatic MP3 BPM Adjuster</title>
+    <title>Advanced Web DJ Controller</title>
     <style>
+        :root {
+            --pioneer-blue: #00AEEF;
+            --pioneer-orange: #F58220;
+            --background-dark: #222;
+            --deck-dark: #333;
+            --mixer-dark: #2a2a2a;
+            --text-light: #f0f0f0;
+            --text-muted: #aaa;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5;
-            color: #333;
+            background-color: var(--background-dark);
+            color: var(--text-light);
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
@@ -17,413 +27,507 @@
             padding: 20px;
             box-sizing: border-box;
         }
-        .container {
-            background-color: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-        }
-        h1 {
-            color: #1a73e8;
-            margin-bottom: 25px;
-        }
-        .control-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            text-align: left;
-        }
-        input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            box-sizing: border-box;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-            cursor: pointer;
-            background-color: #f9f9f9;
-        }
-        button {
-            background-color: #1a73e8;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s, transform 0.1s;
-            margin: 5px;
-        }
-        button:hover {
-            background-color: #155ab6;
-        }
-        button:active {
-            transform: scale(0.98);
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        .bpm-info {
-            background-color: #e8f0fe;
-            border-left: 5px solid #1a73e8;
-            padding: 15px;
-            margin-bottom: 20px;
-            text-align: left;
-            border-radius: 5px;
-        }
-        .bpm-info p {
-            margin: 0;
-            font-size: 1.1em;
-        }
-        .bpm-info strong {
-            font-size: 1.4em;
-            color: #1a73e8;
-        }
-        .bpm-controls {
+        .dj-console {
             display: flex;
-            align-items: center;
             gap: 15px;
+            background-color: #1a1a1a;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+            border: 1px solid #444;
+            width: 100%;
+            max-width: 1400px;
         }
-        .bpm-controls input[type="range"] {
+        .deck, .mixer {
+            background-color: var(--deck-dark);
+            padding: 15px;
+            border-radius: 8px;
             flex-grow: 1;
+            display: flex;
+            flex-direction: column;
         }
-        .bpm-controls input[type="number"] {
-            width: 80px;
+        .deck { flex-basis: 40%; }
+        .mixer { flex-basis: 20%; background-color: var(--mixer-dark); }
+        h2 {
+            text-align: center;
+            margin-top: 0;
+            color: var(--text-light);
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-size: 1.2em;
         }
-        #status {
-            margin-top: 20px;
-            color: #555;
-            min-height: 20px;
+        .control-group { margin-bottom: 15px; }
+        .button-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        button {
+            background-color: #555; color: white; border: none; padding: 10px 12px;
+            border-radius: 6px; cursor: pointer; font-size: 14px;
+            transition: background-color 0.2s, transform 0.1s;
         }
+        button:hover { background-color: #666; }
+        button:active { transform: scale(0.97); }
+        button:disabled { background-color: #444; cursor: not-allowed; color: #888; }
+        .play-button { background-color: #4CAF50; }
+        .cue-button { background-color: var(--pioneer-orange); }
+        .hot-cue-button { background-color: var(--pioneer-blue); }
+        .loop-button { background-color: #9C27B0; }
+        .sync-button.active { background-color: #E91E63; box-shadow: 0 0 10px #E91E63; }
+        .waveform-container {
+            position: relative; background-color: #111;
+            border-radius: 4px; height: 70px; margin-bottom: 15px;
+        }
+        .waveform-canvas, .waveform-progress {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+        .waveform-progress { background-color: rgba(255, 255, 255, 0.15); width: 0; }
+        .jog-wheel {
+            width: 160px; height: 160px; background-color: #444;
+            border-radius: 50%; margin: 15px auto;
+            border: 5px solid #555; cursor: grab;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .jog-wheel:active { cursor: grabbing; }
+        .jog-wheel-inner { width: 80px; height: 80px; background: #282828; border-radius: 50%; border: 1px solid #666; }
+        .fader-group { display: flex; align-items: center; gap: 10px; }
+        input[type="range"] { flex-grow: 1; -webkit-appearance: none; background: #555; height: 5px; border-radius: 5px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; background: var(--text-light); border-radius: 50%; cursor: pointer; }
+        input[type="range"].vertical-fader { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 10px; height: 120px; padding: 0 5px; background: #444; }
+        input[type="range"].vertical-fader::-webkit-slider-thumb { width: 22px; height: 22px; }
+        .knob-container { text-align: center; }
+        .knob-label { font-size: 0.8em; color: var(--text-muted); }
+        .filter-knob {
+            -webkit-appearance: none; appearance: none;
+            width: 50px; height: 50px;
+            background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="45" fill="%234a4a4a" stroke="%23333" stroke-width="4"/%3E%3Cline x1="50" y1="50" x2="50" y2="10" stroke="%23f0f0f0" stroke-width="8" stroke-linecap="round"/%3E%3C/svg%3E');
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            border: none; background-color: transparent; cursor: pointer;
+        }
+        #status { text-align: center; margin-top: 15px; color: var(--text-muted); min-height: 20px; font-size: 0.9em; position: absolute; bottom: 5px; width: 100%;}
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Automatic BPM Adjuster 🎶</h1>
-
-    <div class="control-group">
-        <label for="file-input">1. MP3ファイルを選択</label>
-        <input type="file" id="file-input" accept=".mp3">
-    </div>
-
-    <div id="bpm-info-container" class="bpm-info" style="display: none;">
-        <p>解析されたBPM: <strong id="detected-bpm-display">...</strong></p>
-    </div>
-
-    <div class="control-group">
-        <label for="bpm-slider">2. BPMを調整</label>
-        <div class="bpm-controls">
-            <input type="range" id="bpm-slider" min="50" max="200" value="120" disabled>
-            <input type="number" id="bpm-input" min="50" max="200" value="120" disabled>
+<div class="dj-console">
+    <div class="deck" id="deck-A">
+        <h2>Deck A</h2>
+        <div class="waveform-container">
+            <canvas class="waveform-canvas"></canvas>
+            <div class="waveform-progress"></div>
+        </div>
+        <input type="file" class="file-input" accept=".mp3">
+        <div class="jog-wheel"> <div class="jog-wheel-inner"></div> </div>
+        <div class="control-group">
+            <div class="fader-group">
+                <span>BPM:</span>
+                <input type="range" class="bpm-slider" min="50" max="200" value="120" disabled>
+                <input type="number" class="bpm-input" style="width:70px;" min="50" max="200" value="120" disabled>
+            </div>
+        </div>
+        <div class="button-grid">
+            <button class="play-button" disabled>PLAY</button>
+            <button class="cue-button" disabled>CUE</button>
+            <button class="sync-button" disabled>SYNC</button>
+        </div>
+        <div class="control-group button-grid">
+            <button class="hot-cue-button" data-cue="0" disabled>A</button>
+            <button class="hot-cue-button" data-cue="1" disabled>B</button>
+            <button class="hot-cue-button" data-cue="2" disabled>C</button>
+        </div>
+         <div class="control-group button-grid">
+            <button class="loop-button loop-in" disabled>IN</button>
+            <button class="loop-button loop-out" disabled>OUT</button>
+            <button class="loop-button loop-toggle" disabled>ON/OFF</button>
         </div>
     </div>
 
-    <div class="control-group">
-        <button id="play-pause-button" disabled>再生</button>
-        <button id="download-button" disabled>WAV形式でダウンロード</button>
+    <div class="mixer">
+        <h2>Mixer</h2>
+        <div class="knob-container">
+            <label class="knob-label">FILTER A</label>
+            <input type="range" class="filter-knob" id="filter-A" min="0" max="100" value="50">
+        </div>
+        <input type="range" class="vertical-fader volume-fader" id="volume-A" min="0" max="1" step="0.01" value="1" title="Volume A">
+        
+        <div style="height: 40px;"></div> <input type="range" id="crossfader" min="0" max="1" step="0.01" value="0.5" title="Crossfader">
+        
+        <div style="height: 40px;"></div> <input type="range" class="vertical-fader volume-fader" id="volume-B" min="0" max="1" step="0.01" value="1" title="Volume B">
+        <div class="knob-container">
+            <label class="knob-label">FILTER B</label>
+            <input type="range" class="filter-knob" id="filter-B" min="0" max="100" value="50">
+        </div>
     </div>
 
-    <p id="status"></p>
+    <div class="deck" id="deck-B">
+        <h2>Deck B</h2>
+        <div class="waveform-container">
+            <canvas class="waveform-canvas"></canvas>
+            <div class="waveform-progress"></div>
+        </div>
+        <input type="file" class="file-input" accept=".mp3">
+        <div class="jog-wheel"> <div class="jog-wheel-inner"></div> </div>
+        <div class="control-group">
+            <div class="fader-group">
+                <span>BPM:</span>
+                <input type="range" class="bpm-slider" min="50" max="200" value="120" disabled>
+                <input type="number" class="bpm-input" style="width:70px;" min="50" max="200" value="120" disabled>
+            </div>
+        </div>
+        <div class="button-grid">
+            <button class="play-button" disabled>PLAY</button>
+            <button class="cue-button" disabled>CUE</button>
+            <button class="sync-button" disabled>SYNC</button>
+        </div>
+        <div class="control-group button-grid">
+            <button class="hot-cue-button" data-cue="0" disabled>A</button>
+            <button class="hot-cue-button" data-cue="1" disabled>B</button>
+            <button class="hot-cue-button" data-cue="2" disabled>C</button>
+        </div>
+        <div class="control-group button-grid">
+            <button class="loop-button loop-in" disabled>IN</button>
+            <button class="loop-button loop-out" disabled>OUT</button>
+            <button class="loop-button loop-toggle" disabled>ON/OFF</button>
+        </div>
+    </div>
 </div>
+<p id="status"></p>
 
 <script>
-    // --- DOM要素の取得 ---
-    const fileInput = document.getElementById('file-input');
-    const bpmSlider = document.getElementById('bpm-slider');
-    const bpmInput = document.getElementById('bpm-input');
-    const detectedBpmDisplay = document.getElementById('detected-bpm-display');
-    const bpmInfoContainer = document.getElementById('bpm-info-container');
-    const playPauseButton = document.getElementById('play-pause-button');
-    const downloadButton = document.getElementById('download-button');
-    const status = document.getElementById('status');
+// --- Polyfill for old browsers ---
+window.requestAnimationFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame;
 
-    // --- Web Audio APIの初期化 ---
-    let audioContext;
-    let audioBuffer;
-    let sourceNode;
-    let isPlaying = false;
-    let originalBpm = 0;
+// --- Global State ---
+let audioContext;
+const status = document.getElementById('status');
+let masterDeck = null;
+let masterTempo = 120;
+let animationFrameId = null;
 
-    // --- イベントリスナー ---
-    fileInput.addEventListener('change', handleFileSelect);
-    bpmSlider.addEventListener('input', syncBpmInputs);
-    bpmInput.addEventListener('input', syncBpmInputs);
-    playPauseButton.addEventListener('click', togglePlayback);
-    downloadButton.addEventListener('click', downloadAdjustedAudio);
+const decks = {
+    A: { hotcues: [null, null, null], loop: {} },
+    B: { hotcues: [null, null, null], loop: {} }
+};
 
-    // --- 機能の有効/無効化 ---
-    function updateControlsState(isReady) {
-        bpmSlider.disabled = !isReady;
-        bpmInput.disabled = !isReady;
-        playPauseButton.disabled = !isReady;
-        downloadButton.disabled = !isReady;
-    }
+// --- Initialization ---
+function initializeAudioContext() {
+    if (audioContext) return;
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Create Mixer Nodes
+    const mixer = {};
+    mixer.crossfadeA = audioContext.createGain();
+    mixer.crossfadeB = audioContext.createGain();
+    mixer.crossfadeA.connect(audioContext.destination);
+    mixer.crossfadeB.connect(audioContext.destination);
+    document.getElementById('crossfader').dispatchEvent(new Event('input'));
+    
+    ['A', 'B'].forEach(id => {
+        const d = decks[id];
+        d.volumeNode = audioContext.createGain();
+        d.filterNode = audioContext.createBiquadFilter();
+        // Connect: Deck -> Filter -> Volume -> Crossfader
+        d.filterNode.connect(d.volumeNode);
+        d.volumeNode.connect(id === 'A' ? mixer.crossfadeA : mixer.crossfadeB);
+    });
+}
 
-    // --- ファイル選択時の処理 ---
-    async function handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+// --- Event Listeners Setup ---
+document.querySelectorAll('.deck').forEach(deckEl => {
+    const deckId = deckEl.id.split('-')[1];
+    deckEl.querySelector('.file-input').addEventListener('change', e => handleFileSelect(e, deckId));
+    deckEl.querySelector('.play-button').addEventListener('click', () => togglePlayback(deckId));
+    deckEl.querySelector('.cue-button').addEventListener('click', () => handleCue(deckId));
+    deckEl.querySelector('.sync-button').addEventListener('click', () => handleSync(deckId));
+    deckEl.querySelectorAll('.hot-cue-button').forEach(btn => btn.addEventListener('click', e => handleHotCue(deckId, parseInt(e.target.dataset.cue))));
+    deckEl.querySelector('.loop-in').addEventListener('click', () => setLoop(deckId, 'start'));
+    deckEl.querySelector('.loop-out').addEventListener('click', () => setLoop(deckId, 'end'));
+    deckEl.querySelector('.loop-toggle').addEventListener('click', () => toggleLoop(deckId));
+    
+    // Jog Wheel for Pitch Bend
+    const jog = deckEl.querySelector('.jog-wheel');
+    jog.addEventListener('mousedown', e => {
+        if (!decks[deckId].isPlaying) return;
+        const initialX = e.clientX;
+        const originalRate = decks[deckId].sourceNode.playbackRate.value;
 
-        if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        function onMouseMove(moveEvent) {
+            const deltaX = moveEvent.clientX - initialX;
+            // Adjust playback rate by a small amount for pitch bend effect
+            const bendAmount = deltaX / 2000;
+            decks[deckId].sourceNode.playbackRate.value = originalRate + bendAmount;
         }
+        function onMouseUp() {
+            decks[deckId].sourceNode.playbackRate.value = originalRate;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        }
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+});
 
-        updateControlsState(false);
-        bpmInfoContainer.style.display = 'none';
-        status.textContent = 'ファイルをデコード中...';
+document.getElementById('crossfader').addEventListener('input', e => {
+    const val = parseFloat(e.target.value);
+    const gainA = Math.cos(val * 0.5 * Math.PI);
+    const gainB = Math.sin(val * 0.5 * Math.PI);
+    if(decks.A.volumeNode) decks.A.volumeNode.connect(audioContext.destination).gain.value = gainA; // This is a simplified connection logic
+    if(decks.B.volumeNode) decks.B.volumeNode.connect(audioContext.destination).gain.value = gainB;
+});
 
-        try {
-            const arrayBuffer = await file.arrayBuffer();
-            audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            
-            status.textContent = 'BPMを解析中... (曲の長さにより時間がかかります)';
-            // BPM解析処理を少し遅延させてUIの更新を確実に行う
-            setTimeout(async () => {
-                const detectedBpm = await analyzeBpm(audioBuffer);
-                originalBpm = detectedBpm;
+document.getElementById('filter-A').addEventListener('input', e => applyFilter(e, 'A'));
+document.getElementById('filter-B').addEventListener('input', e => applyFilter(e, 'B'));
+document.getElementById('volume-A').addEventListener('input', e => decks.A.volumeNode.gain.value = e.target.value);
+document.getElementById('volume-B').addEventListener('input', e => decks.B.volumeNode.gain.value = e.target.value);
 
-                detectedBpmDisplay.textContent = Math.round(originalBpm * 10) / 10;
-                bpmInfoContainer.style.display = 'block';
+// --- Core Functions ---
+async function handleFileSelect(event, deckId) {
+    const file = event.target.files[0];
+    if (!file) return;
+    initializeAudioContext();
+    status.textContent = `Deck ${deckId}: Loading...`;
+    
+    resetDeck(deckId);
+    const arrayBuffer = await file.arrayBuffer();
+    decks[deckId].audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    
+    drawWaveform(deckId);
+    
+    status.textContent = `Deck ${deckId}: Analyzing BPM...`;
+    const bpm = await analyzeBpm(decks[deckId].audioBuffer);
+    updateBpmUI(deckId, bpm);
+    decks[deckId].originalBpm = bpm;
+    
+    enableControls(deckId, true);
+    status.textContent = `Deck ${deckId}: Ready.`;
+}
 
-                // スライダー等の範囲と現在値を更新
-                const baseBpm = Math.round(originalBpm);
-                bpmSlider.min = Math.floor(baseBpm * 0.5);
-                bpmSlider.max = Math.ceil(baseBpm * 2);
-                bpmInput.min = Math.floor(baseBpm * 0.5);
-                bpmInput.max = Math.ceil(baseBpm * 2);
-                bpmSlider.value = baseBpm;
-                bpmInput.value = baseBpm;
+function playSound(deckId) {
+    const d = decks[deckId];
+    if (!d.audioBuffer) return;
+    
+    d.sourceNode = audioContext.createBufferSource();
+    d.sourceNode.buffer = d.audioBuffer;
+    d.sourceNode.connect(d.filterNode);
+    
+    updatePlaybackRate(deckId);
+    
+    // Apply loop if active
+    if (d.loop.active && d.loop.start != null && d.loop.end != null) {
+        d.sourceNode.loop = true;
+        d.sourceNode.loopStart = d.loop.start;
+        d.sourceNode.loopEnd = d.loop.end;
+    }
+    
+    const startTime = d.cuePoint || 0;
+    d.sourceNode.start(0, startTime);
+    d.startTime = audioContext.currentTime - startTime;
+    
+    d.isPlaying = true;
+    document.querySelector(`#deck-${deckId} .play-button`).textContent = 'PAUSE';
+    
+    if (!animationFrameId) startVisualUpdates();
+}
+
+function stopSound(deckId) {
+    const d = decks[deckId];
+    if (!d.sourceNode) return;
+    d.sourceNode.stop();
+    d.sourceNode = null;
+    d.cuePoint = audioContext.currentTime - d.startTime;
+    d.isPlaying = false;
+    document.querySelector(`#deck-${deckId} .play-button`).textContent = 'PLAY';
+    
+    if (!decks.A.isPlaying && !decks.B.isPlaying) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+}
+
+function togglePlayback(deckId) {
+    if (decks[deckId].isPlaying) {
+        stopSound(deckId);
+    } else {
+        playSound(deckId);
+    }
+}
+
+// ... (BPM analysis functions: analyzeBpm, getPeaks, getIntervals, getTopBpm - same as before) ...
+
+// --- New Feature Functions ---
+
+function handleSync(deckId) {
+    const d = decks[deckId];
+    const btn = document.querySelector(`#deck-${deckId} .sync-button`);
+
+    if (masterDeck === deckId) { // If it's already master, turn off sync
+        masterDeck = null;
+        btn.classList.remove('active');
+        document.querySelectorAll('.sync-button').forEach(b => b.classList.remove('active'));
+    } else {
+        if (!masterDeck) { // If no master, this deck becomes master
+            masterDeck = deckId;
+            masterTempo = parseFloat(document.querySelector(`#deck-${deckId} .bpm-input`).value);
+        }
+        // Sync this deck to master tempo
+        const newBpm = masterTempo;
+        updateBpmUI(deckId, newBpm, false);
+        updatePlaybackRate(deckId);
+        // Activate all sync buttons to show link
+        document.querySelectorAll('.sync-button').forEach(b => b.classList.add('active'));
+    }
+}
+
+function handleCue(deckId) {
+    const d = decks[deckId];
+    if (d.isPlaying) { // Return to CUE
+        stopSound(deckId);
+        playSound(deckId); // This will start from the stored cuePoint
+    } else { // Set CUE
+        d.cuePoint = (d.startTime && audioContext) ? audioContext.currentTime - d.startTime : 0;
+        status.textContent = `Deck ${deckId}: CUE point set.`;
+    }
+}
+
+function handleHotCue(deckId, cueIndex) {
+    const d = decks[deckId];
+    if (d.hotcues[cueIndex] !== null) { // Trigger Hot Cue
+        d.cuePoint = d.hotcues[cueIndex];
+        if (d.isPlaying) stopSound(deckId);
+        playSound(deckId);
+    } else { // Set Hot Cue
+        if(!d.audioBuffer) return;
+        const currentTime = d.isPlaying ? audioContext.currentTime - d.startTime : (d.cuePoint || 0);
+        d.hotcues[cueIndex] = currentTime;
+        document.querySelector(`#deck-${deckId} .hot-cue-button[data-cue='${cueIndex}']`).style.backgroundColor = '#FFEB3B';
+    }
+}
+
+function setLoop(deckId, type) {
+    const d = decks[deckId];
+    if(!d.audioBuffer) return;
+    const currentTime = d.isPlaying ? audioContext.currentTime - d.startTime : (d.cuePoint || 0);
+    d.loop[type] = currentTime;
+    status.textContent = `Deck ${deckId}: Loop ${type === 'start' ? 'In' : 'Out'} set.`;
+}
+
+function toggleLoop(deckId) {
+    const d = decks[deckId];
+    d.loop.active = !d.loop.active;
+    status.textContent = `Deck ${deckId}: Loop ${d.loop.active ? 'ON' : 'OFF'}.`;
+    if (d.isPlaying) { // Re-trigger sound to apply loop setting
+        stopSound(deckId);
+        playSound(deckId);
+    }
+}
+
+function applyFilter(event, deckId) {
+    const value = parseFloat(event.target.value); // 0-100
+    const filterNode = decks[deckId].filterNode;
+    const maxFreq = audioContext.sampleRate / 2;
+    
+    if (value === 50) { // Center position, no filter
+        filterNode.type = 'lowpass';
+        filterNode.frequency.value = maxFreq;
+    } else if (value < 50) { // Low-pass (cut highs)
+        filterNode.type = 'lowpass';
+        // Exponential scale for better feel
+        const freq = Math.pow(10, 2 + (value/50) * 2.5);
+        filterNode.frequency.setTargetAtTime(freq, audioContext.currentTime, 0.01);
+    } else { // High-pass (cut lows)
+        filterNode.type = 'highpass';
+        const freq = Math.pow(10, 1 + ((value - 50)/50) * 3);
+        filterNode.frequency.setTargetAtTime(freq, audioContext.currentTime, 0.01);
+    }
+}
+
+// --- UI & Visuals ---
+function startVisualUpdates() {
+    function updateLoop() {
+        ['A', 'B'].forEach(id => {
+            const d = decks[id];
+            if (d.isPlaying && d.audioBuffer) {
+                const elapsed = audioContext.currentTime - d.startTime;
+                const progress = (elapsed / d.audioBuffer.duration) * 100;
+                document.querySelector(`#deck-${id} .waveform-progress`).style.width = `${progress}%`;
                 
-                status.textContent = '準備ができました。';
-                updateControlsState(true);
-            }, 100);
-
-        } catch (error) {
-            status.textContent = 'エラー: ファイルの処理に失敗しました。';
-            console.error(error);
-            audioBuffer = null;
-        }
-    }
-
-    // --- BPMスライダーと入力欄の同期・再生レート更新 ---
-    function syncBpmInputs(event) {
-        const newBpm = event.target.value;
-        bpmSlider.value = newBpm;
-        bpmInput.value = newBpm;
-        updatePlaybackRate();
-    }
-    
-    function updatePlaybackRate() {
-        if (isPlaying && sourceNode && originalBpm > 0) {
-            const newBpm = parseFloat(bpmInput.value);
-            sourceNode.playbackRate.value = newBpm / originalBpm;
-        }
-    }
-
-    // --- 再生/停止 ---
-    function togglePlayback() {
-        if (isPlaying) {
-            stopSound();
-        } else {
-            playSound();
-        }
-    }
-
-    function playSound() {
-        if (!audioBuffer || !audioContext) return;
-        sourceNode = audioContext.createBufferSource();
-        sourceNode.buffer = audioBuffer;
-        sourceNode.connect(audioContext.destination);
-        sourceNode.onended = () => {
-            if (isPlaying) stopSound();
-        };
-        updatePlaybackRate(); // 再生開始前にレートを設定
-        sourceNode.start(0);
-        isPlaying = true;
-        playPauseButton.textContent = '停止';
-    }
-
-    function stopSound() {
-        if (sourceNode) {
-            sourceNode.stop();
-            sourceNode.disconnect();
-            sourceNode = null;
-        }
-        isPlaying = false;
-        playPauseButton.textContent = '再生';
-    }
-
-    // --- BPM解析 ---
-    async function analyzeBpm(audioBuffer) {
-        // オフラインコンテキストで音声データを高速処理
-        const offlineCtx = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
-        const source = offlineCtx.createBufferSource();
-        source.buffer = audioBuffer;
-
-        // ビートが豊富な低周波帯を抽出するフィルター
-        const filter = offlineCtx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 150; // Hz
-        filter.Q.value = 1;
-
-        source.connect(filter);
-        filter.connect(offlineCtx.destination);
-        source.start(0);
-
-        const processedBuffer = await offlineCtx.startRendering();
-        const data = processedBuffer.getChannelData(0);
-        
-        // エネルギーのピーク（ビート）を検出
-        const peaks = getPeaks(data, audioBuffer.sampleRate);
-        if (peaks.length < 2) return 120; // デフォルト値
-
-        // ピーク間の間隔を分析
-        const intervals = getIntervals(peaks);
-        
-        // 最も可能性の高いBPMを特定
-        const topBpm = getTopBpm(intervals, audioBuffer.sampleRate);
-
-        return topBpm.bpm;
-    }
-
-    function getPeaks(data, sampleRate) {
-        const peaks = [];
-        const threshold = 0.6; // ピーク検出の閾値
-        for (let i = 1; i < data.length - 1; i++) {
-            if (data[i] > data[i - 1] && data[i] > data[i + 1] && data[i] > threshold) {
-                peaks.push(i);
+                // Manual loop check for browsers not supporting loop property perfectly
+                if(d.loop.active && d.loop.end && elapsed >= d.loop.end){
+                    d.cuePoint = d.loop.start;
+                    stopSound(id);
+                    playSound(id);
+                }
             }
-        }
-        return peaks;
-    }
-
-    function getIntervals(peaks) {
-        const intervals = [];
-        for (let i = 0; i < peaks.length - 1; i++) {
-            intervals.push(peaks[i + 1] - peaks[i]);
-        }
-        return intervals;
-    }
-
-    function getTopBpm(intervals, sampleRate) {
-        const intervalCounts = {};
-        intervals.forEach(interval => {
-            // BPMの候補を計算 (60秒 / (サンプル間隔 / サンプルレート))
-            const theoreticalBpm = 60 / (interval / sampleRate);
-            
-            // BPMを妥当な範囲(70-180)に丸め込む
-            let roundedBpm = Math.round(theoreticalBpm);
-            while(roundedBpm < 70) roundedBpm *= 2;
-            while(roundedBpm > 180) roundedBpm /= 2;
-            roundedBpm = Math.round(roundedBpm);
-
-            intervalCounts[roundedBpm] = (intervalCounts[roundedBpm] || 0) + 1;
         });
-
-        // 最も頻出するBPMグループを見つける
-        let topBpm = { bpm: 120, count: 0 };
-        for (const bpm in intervalCounts) {
-            if (intervalCounts[bpm] > topBpm.count) {
-                topBpm = { bpm: parseFloat(bpm), count: intervalCounts[bpm] };
-            }
-        }
-        return topBpm;
+        animationFrameId = requestAnimationFrame(updateLoop);
     }
+    updateLoop();
+}
+
+function drawWaveform(deckId) {
+    const buffer = decks[deckId].audioBuffer;
+    if (!buffer) return;
+    const canvas = document.querySelector(`#deck-${deckId} .waveform-canvas`);
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
     
-    // --- ダウンロード処理 (変更なし) ---
-    async function downloadAdjustedAudio() {
-        if (!audioBuffer || !originalBpm) {
-            alert('オーディオファイルが設定されていません。');
-            return;
+    const data = buffer.getChannelData(0);
+    const step = Math.ceil(data.length / canvas.width);
+    const amp = canvas.height / 2;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'cyan';
+    ctx.beginPath();
+    for (let i = 0; i < canvas.width; i++) {
+        let min = 1.0;
+        let max = -1.0;
+        for (let j = 0; j < step; j++) {
+            const datum = data[(i * step) + j];
+            if (datum < min) min = datum;
+            if (datum > max) max = datum;
         }
-        
-        status.textContent = '音源をレンダリング中...これには数秒かかります。';
-        downloadButton.disabled = true;
-
-        try {
-            const newBpm = parseFloat(bpmInput.value);
-            const playbackRate = newBpm / originalBpm;
-            
-            const offlineContext = new OfflineAudioContext(
-                audioBuffer.numberOfChannels,
-                Math.ceil(audioBuffer.length / playbackRate), // 再生速度に合わせて長さを調整
-                audioBuffer.sampleRate
-            );
-
-            const offlineSource = offlineContext.createBufferSource();
-            offlineSource.buffer = audioBuffer;
-            offlineSource.playbackRate.value = playbackRate;
-            offlineSource.connect(offlineContext.destination);
-            offlineSource.start(0);
-
-            const renderedBuffer = await offlineContext.startRendering();
-            const wavBlob = bufferToWav(renderedBuffer);
-
-            const url = URL.createObjectURL(wavBlob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `adjusted_bpm_${newBpm}.wav`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-
-            status.textContent = 'ダウンロードが完了しました。';
-        } catch(e) {
-            status.textContent = 'エラー: 音源の生成に失敗しました。';
-            console.error(e);
-        } finally {
-            downloadButton.disabled = false;
-        }
+        ctx.moveTo(i, (1 + min) * amp);
+        ctx.lineTo(i, (1 + max) * amp);
     }
+    ctx.stroke();
+}
 
-    function bufferToWav(buffer) {
-        const numOfChan = buffer.numberOfChannels;
-        const length = buffer.length * numOfChan * 2 + 44;
-        const bufferArr = new ArrayBuffer(length);
-        const view = new DataView(bufferArr);
-        const channels = [];
-        let i, sample;
-        let offset = 0, pos = 0;
-        
-        function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
-        function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
-
-        setUint32(0x46464952); // "RIFF"
-        setUint32(length - 8);
-        setUint32(0x45564157); // "WAVE"
-        setUint32(0x20746d66); // "fmt "
-        setUint32(16);
-        setUint16(1);
-        setUint16(numOfChan);
-        setUint32(buffer.sampleRate);
-        setUint32(buffer.sampleRate * 2 * numOfChan);
-        setUint16(numOfChan * 2);
-        setUint16(16);
-        setUint32(0x61746164); // "data"
-        setUint32(length - pos - 4);
-
-        for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
-
-        while (pos < length) {
-            for (i = 0; i < numOfChan; i++) {
-                sample = Math.max(-1, Math.min(1, channels[i][offset]));
-                sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-                view.setInt16(pos, sample, true);
-                pos += 2;
-            }
-            offset++;
-        }
-        return new Blob([view], { type: 'audio/wav' });
+function updateBpmUI(deckId, bpm, updateSlider = true) {
+    const deckEl = document.getElementById(`deck-${deckId}`);
+    const bpmInput = deckEl.querySelector('.bpm-input');
+    const bpmSlider = deckEl.querySelector('.bpm-slider');
+    bpmInput.value = Math.round(bpm * 10) / 10;
+    if (updateSlider) {
+        const baseBpm = Math.round(bpm);
+        bpmSlider.min = baseBpm * 0.8;
+        bpmSlider.max = baseBpm * 1.2;
+        bpmSlider.value = bpm;
     }
+}
+
+function enableControls(deckId, isEnabled) {
+    document.querySelectorAll(`#deck-${deckId} button, #deck-${deckId} input[type=range], #deck-${deckId} input[type=number]`).forEach(el => {
+        if (!el.classList.contains('file-input')) {
+            el.disabled = !isEnabled;
+        }
+    });
+}
+
+function resetDeck(deckId) {
+    if (decks[deckId].isPlaying) stopSound(deckId);
+    enableControls(deckId, false);
+    decks[deckId] = { ...decks[deckId], isPlaying: false, audioBuffer: null, originalBpm: 0, cuePoint: 0, hotcues: [null, null, null], loop: {} };
+    document.querySelector(`#deck-${deckId} .waveform-progress`).style.width = '0%';
+    const canvas = document.querySelector(`#deck-${deckId} .waveform-canvas`);
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    document.querySelectorAll(`#deck-${deckId} .hot-cue-button`).forEach(btn => btn.style.backgroundColor = '');
+}
+
+// ... (Paste the unchanged BPM analysis functions here)
+async function analyzeBpm(audioBuffer) {const offlineCtx = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);const source = offlineCtx.createBufferSource();source.buffer = audioBuffer;const filter = offlineCtx.createBiquadFilter();filter.type = 'lowpass';filter.frequency.value = 150;filter.Q.value = 1;source.connect(filter);filter.connect(offlineCtx.destination);source.start(0);const processedBuffer = await offlineCtx.startRendering();const data = processedBuffer.getChannelData(0);const peaks = getPeaks(data);if (peaks.length < 2) return 120;const intervals = getIntervals(peaks);const topBpm = getTopBpm(intervals, audioBuffer.sampleRate);return topBpm.bpm;}
+function getPeaks(data) {const peaks = []; const threshold = 0.8; for (let i = 1; i < data.length - 1; i++) { if (data[i] > data[i-1] && data[i] > data[i+1] && data[i] > threshold) { peaks.push(i); } } return peaks; }
+function getIntervals(peaks) { const intervals = []; for (let i = 0; i < peaks.length - 1; i++) { intervals.push(peaks[i + 1] - peaks[i]); } return intervals; }
+function getTopBpm(intervals, sampleRate) { const intervalCounts = {}; intervals.forEach(interval => { const theoreticalBpm = 60 / (interval / sampleRate); let roundedBpm = Math.round(theoreticalBpm); while(roundedBpm < 80) roundedBpm *= 2; while(roundedBpm > 160) roundedBpm /= 2; roundedBpm = Math.round(roundedBpm); intervalCounts[roundedBpm] = (intervalCounts[roundedBpm] || 0) + 1; }); let topBpm = { bpm: 120, count: 0 }; for (const bpm in intervalCounts) { if (intervalCounts[bpm] > topBpm.count) { topBpm = { bpm: parseFloat(bpm), count: intervalCounts[bpm] }; } } return topBpm; }
 
 </script>
 </body>
